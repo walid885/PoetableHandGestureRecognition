@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
+import os
 
 class HandGestureRecognizer:
     def __init__(self):
@@ -25,11 +26,8 @@ class HandGestureRecognizer:
             "thumbs_up": self._is_thumbs_up
         }
         
-        # Debug mode flag
-        self.debug = True
-        
+    # [Gesture recognition methods remain unchanged]
     def _is_open_palm(self, landmarks):
-        # All fingers extended
         finger_tips = [self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
                       self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
                       self.mp_hands.HandLandmark.RING_FINGER_TIP,
@@ -40,8 +38,6 @@ class HandGestureRecognizer:
                      self.mp_hands.HandLandmark.RING_FINGER_MCP,
                      self.mp_hands.HandLandmark.PINKY_MCP]
         
-        wrist = landmarks[self.mp_hands.HandLandmark.WRIST]
-        
         # Check if all fingertips are higher than their MCP joints
         fingers_extended = True
         for tip, mcp in zip(finger_tips, finger_mcp):
@@ -50,9 +46,6 @@ class HandGestureRecognizer:
                 break
                 
         # Check thumb position separately
-        thumb_tip = landmarks[self.mp_hands.HandLandmark.THUMB_TIP]
-        thumb_mcp = landmarks[self.mp_hands.HandLandmark.THUMB_MCP]
-        
         if landmarks[self.mp_hands.HandLandmark.THUMB_TIP].x < landmarks[self.mp_hands.HandLandmark.THUMB_MCP].x:
             thumb_extended = True
         else:
@@ -67,12 +60,7 @@ class HandGestureRecognizer:
                       self.mp_hands.HandLandmark.RING_FINGER_TIP,
                       self.mp_hands.HandLandmark.PINKY_TIP]
         
-        wrist = landmarks[self.mp_hands.HandLandmark.WRIST]
-        
-        # For a fist, all fingertips should be close to the palm
-        palm_center = landmarks[self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
-        
-        # Check if all fingers are curled (y-coordinate below their MCP joint)
+        # Check if all fingers are curled
         fingers_curled = True
         for i, tip in enumerate(finger_tips):
             if i == 0:  # Thumb
@@ -89,11 +77,7 @@ class HandGestureRecognizer:
     
     def _is_pointing(self, landmarks):
         # Index finger extended, other fingers curled
-        index_tip = landmarks[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
-        index_pip = landmarks[self.mp_hands.HandLandmark.INDEX_FINGER_PIP]
-        
-        # Check that index finger is extended
-        index_extended = index_tip.y < index_pip.y
+        index_extended = landmarks[self.mp_hands.HandLandmark.INDEX_FINGER_TIP].y < landmarks[self.mp_hands.HandLandmark.INDEX_FINGER_PIP].y
         
         # Check that other fingers are curled
         other_fingers_curled = True
@@ -125,12 +109,7 @@ class HandGestureRecognizer:
     
     def _is_thumbs_up(self, landmarks):
         # Thumb extended upward, other fingers curled
-        thumb_tip = landmarks[self.mp_hands.HandLandmark.THUMB_TIP]
-        thumb_mcp = landmarks[self.mp_hands.HandLandmark.THUMB_MCP]
-        wrist = landmarks[self.mp_hands.HandLandmark.WRIST]
-        
-        # Check if thumb is pointing upward
-        thumb_up = thumb_tip.y < thumb_mcp.y
+        thumb_up = landmarks[self.mp_hands.HandLandmark.THUMB_TIP].y < landmarks[self.mp_hands.HandLandmark.THUMB_MCP].y
         
         # Check if other fingers are curled
         other_fingers_curled = True
@@ -198,40 +177,66 @@ class HandGestureRecognizer:
                 
         return frame, results.multi_hand_landmarks
 
+def generate_demo_frames(recognizer, output_dir="./output", num_frames=200):
+    """Generate demo frames and save them as images for presentation"""
+    
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    width, height = 640, 480
+    gestures = ["Open Palm", "Closed Fist", "Pointing", "Victory", "Thumbs Up"]
+    frames_per_gesture = num_frames // len(gestures)
+    
+    print(f"Generating {frames_per_gesture} demo frames for each gesture...")
+    
+    for gesture_idx, gesture in enumerate(gestures):
+        for i in range(frames_per_gesture):
+            # Create a white frame
+            frame = np.ones((height, width, 3), dtype=np.uint8) * 255
+            
+            # Add gesture information
+            cv2.putText(frame, f"DEMO: {gesture}", (width//6, height//3), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            
+            # Add animation effect - a simple moving dot to simulate hand movement
+            radius = 10
+            x_center = width // 2 + int(100 * np.sin(i * 0.1))
+            y_center = height // this 2 + int(80 * np.cos(i * 0.1))
+            cv2.circle(frame, (x_center, y_center), radius, (0, 0, 255), -1)
+            
+            # Save the frame
+            frame_path = os.path.join(output_dir, f"gesture_{gesture_idx}_{i:03d}.jpg")
+            cv2.imwrite(frame_path, frame)
+            
+            # Progress indicator
+            if i % 10 == 0:
+                print(f"Generated {i}/{frames_per_gesture} frames for {gesture}")
+    
+    print(f"All demo frames saved to {output_dir}")
+    return output_dir
+
 def main():
-    print("Starting Hand Gesture Recognition...")
-    cap = cv2.VideoCapture(0)
+    print("Starting Hand Gesture Recognition Demo Generator...")
     
-    # Check if camera opened successfully
-    if not cap.isOpened():
-        print("Error: Could not open camera.")
-        return
-    
+    # Create the recognizer
     recognizer = HandGestureRecognizer()
     
-    print("Camera initialized. Press 'q' to quit.")
+    # Generate and save demo frames
+    output_dir = generate_demo_frames(recognizer)
     
-    while True:
-        # Read frame from camera
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Failed to capture image")
-            break
-            
-        # Process frame for hand gestures
-        processed_frame, _ = recognizer.process_frame(frame)
-        
-        # Display the processed frame
-        cv2.imshow('MediaPipe Hand Gesture Recognition', processed_frame)
-        
-        # Break loop on 'q' key press
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    print(f"Demo generation complete. Images saved to {output_dir}")
+    print("For presentation:")
+    print(f"1. Use these images in your slides")
+    print(f"2. Show the code structure and explain the gesture recognition logic")
+    print(f"3. Describe how MediaPipe tracks hand landmarks (21 points)")
     
-    # Release resources
-    cap.release()
-    cv2.destroyAllWindows()
-    print("Application closed successfully.")
+    # List the five gestures and their characteristics
+    print("\nGesture Recognition Logic:")
+    print("1. Open Palm: All fingers extended")
+    print("2. Closed Fist: All fingers curled toward palm")
+    print("3. Pointing: Index finger extended, others curled")
+    print("4. Victory: Index and middle fingers extended in V shape")
+    print("5. Thumbs Up: Thumb extended upward, others curled")
 
 if __name__ == "__main__":
     main()

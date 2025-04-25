@@ -7,9 +7,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY req.txt .
+COPY app/req.txt .
 RUN pip install --no-cache-dir -r req.txt
+
+# Create output directory for demo frames
+RUN mkdir -p /app/output
 
 COPY . .
 
-CMD ["python", "script.py"]
+CMD ["python", "app/script.py"]
